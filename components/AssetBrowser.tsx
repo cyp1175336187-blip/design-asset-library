@@ -3,10 +3,10 @@
 import { useSearchParams } from 'next/navigation'
 import { AssetGrid } from '@/components/AssetGrid'
 import { useBrowseQuery } from '@/components/BrowseState'
-import { filterAssets } from '@/lib/assets'
+import { filterAssets, type Asset } from '@/lib/assets'
 import { findCategory } from '@/lib/taxonomy'
 
-export function AssetBrowser() {
+export function AssetBrowser({ assets }: { assets: Asset[] }) {
   const params = useSearchParams()
   const { query } = useBrowseQuery()
   const categoryId = params.get('category')?.trim() || undefined
@@ -17,7 +17,7 @@ export function AssetBrowser() {
     <section>
       <h1 className="mb-4 text-xl font-semibold">{category ? category.name : categoryId ? '未知分类' : '全部资产'}</h1>
       <AssetGrid
-        assets={filterAssets({ categoryId, query: trimmedQuery })}
+        assets={filterAssets(assets, { categoryId, query: trimmedQuery })}
         categoryName={category?.name}
         query={trimmedQuery || undefined}
         unknownCategory={Boolean(categoryId && !category)}

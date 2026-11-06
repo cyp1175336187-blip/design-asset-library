@@ -1,11 +1,18 @@
 import type { ReactNode } from 'react'
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { signOut } from '@/app/(shell)/actions'
 import { BrowseState } from '@/components/BrowseState'
 import { SearchBar } from '@/components/SearchBar'
 import { Sidebar } from '@/components/Sidebar'
+import { createClient } from '@/lib/supabase/server'
 
-export default function ShellLayout({ children }: { children: ReactNode }) {
+export const dynamic = 'force-dynamic'
+
+export default async function ShellLayout({ children }: { children: ReactNode }) {
+  const supabase = await createClient()
+  const user = supabase ? (await supabase.auth.getUser()).data.user : null
+
   return (
     <BrowseState>
       <div className="flex h-screen">
@@ -18,9 +25,15 @@ export default function ShellLayout({ children }: { children: ReactNode }) {
               Logo
             </div>
             <SearchBar />
-            <Link href="/login" className="shrink-0 text-sm">
-              登录
+            <Link href="/upload" className="shrink-0 text-sm">
+              上传
             </Link>
+            {user?.email ? <span className="hidden max-w-40 truncate text-sm text-neutral-600 sm:inline">{user.email}</span> : null}
+            <form action={signOut}>
+              <button type="submit" className="shrink-0 text-sm">
+                退出
+              </button>
+            </form>
           </header>
           <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
         </div>

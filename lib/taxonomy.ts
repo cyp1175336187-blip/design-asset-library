@@ -51,6 +51,16 @@ function walk(categories: Category[], visit: (category: Category) => void) {
   }
 }
 
+export function allCategories(): Category[] {
+  const list: Category[] = []
+  for (const section of taxonomy) {
+    walk(section.categories, (category) => {
+      list.push(category)
+    })
+  }
+  return list
+}
+
 export function findCategory(id: string): Category | undefined {
   let found: Category | undefined
   for (const section of taxonomy) {
