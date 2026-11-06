@@ -1,0 +1,27 @@
+{
+  "name": "design-asset-library",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.4",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "autoprefixer": "10.6.2",
+    "eslint": "10.14.0",
+    "eslint-config-next": "16.4.5",
+    "postcss": "8.5.32",
+    "tailwindcss": "4.3.4",
+    "typescript": "7.0.2"
+  }
+}
