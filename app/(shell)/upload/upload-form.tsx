@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
+import { fieldClass, primaryButtonClass } from '@/components/styles'
 import { ASSET_BUCKET, storageObjectPath } from '@/lib/storage'
 import { getBrowserClient } from '@/lib/supabase/browser'
-import { allCategories } from '@/lib/taxonomy'
+import { allCategories, categoryPathName } from '@/lib/taxonomy'
 import {
   acceptAttribute,
   classifySelectedFiles,
@@ -138,34 +139,30 @@ export function UploadForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture} className="mt-4 space-y-4">
-      <label className="block text-sm">
-        文件
-        <input
-          name="files"
-          type="file"
-          required
-          multiple
-          accept={acceptAttribute()}
-          onChange={onFilesChanged}
-          className="mt-1 block w-full text-sm"
-        />
+    <form onSubmit={onSubmit} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture} className="mt-8 space-y-5">
+      <label className="flex cursor-pointer flex-col items-center rounded-2xl border border-dashed border-neutral-300 bg-mist px-6 py-14 text-center transition-colors hover:border-neutral-500 focus-within:border-ink">
+        <input name="files" type="file" required multiple accept={acceptAttribute()} onChange={onFilesChanged} className="sr-only" />
+        <span className="text-sm font-medium text-ink">选择文件</span>
+        <span className="mt-2 max-w-md text-sm leading-6 text-muted">可以选一个或多个文件。拖入文件夹会被拒绝，不会上传其中的内容。</span>
       </label>
-      <p className="text-sm text-neutral-600">可以选一个或多个文件。拖入文件夹会被拒绝，不会上传其中的内容。</p>
       <label className="block text-sm">
         分类
-        <select name="category" required className="mt-1 w-full border px-3 py-2" defaultValue={categories[0]?.id ?? ''}>
+        <select name="category" required className={fieldClass} defaultValue={categories[0]?.id ?? ''}>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {categoryPathName(category)}
             </option>
           ))}
         </select>
       </label>
-      {summary ? <p className="text-sm text-neutral-700">{summary}</p> : null}
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      {progress ? <p className="text-sm text-neutral-600">{progress}</p> : null}
-      <button type="submit" disabled={pending} className="border px-3 py-2 text-sm disabled:opacity-60">
+      {summary ? <p className="rounded-xl bg-mist px-4 py-3 text-sm leading-6 text-neutral-700">{summary}</p> : null}
+      {error ? (
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-danger">
+          {error}
+        </p>
+      ) : null}
+      {progress ? <p className="text-sm text-muted">{progress}</p> : null}
+      <button type="submit" disabled={pending} className={primaryButtonClass}>
         {pending ? '正在上传…' : '上传'}
       </button>
     </form>

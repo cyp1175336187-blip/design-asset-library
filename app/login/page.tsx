@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
+import { BrandMark } from '@/components/BrandMark'
+import { fieldClass, primaryButtonClass } from '@/components/styles'
 import { safeNextPath } from '@/lib/browse'
 import { getBrowserClient } from '@/lib/supabase/browser'
 
@@ -37,23 +39,46 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 border p-6">
-        <h1 className="text-xl font-semibold">登录</h1>
-        <p className="text-sm text-neutral-600">使用邮箱和密码登录。账号由管理员在 Supabase 中创建。</p>
-        <label className="block text-sm">
-          账号
-          <input name="account" type="email" required autoComplete="username" placeholder="name@example.com" className="mt-1 w-full border px-3 py-2" />
-        </label>
-        <label className="block text-sm">
-          密码
-          <input name="password" type="password" required autoComplete="current-password" className="mt-1 w-full border px-3 py-2" />
-        </label>
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
-        <button type="submit" disabled={pending} className="border px-3 py-2 text-sm disabled:opacity-60">
-          {pending ? '正在登录…' : '登录'}
-        </button>
-      </form>
+    <main className="grid min-h-dvh lg:grid-cols-2">
+      <section className="hidden flex-col justify-between bg-ink px-12 py-12 text-white lg:flex">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex rounded-[10px] bg-white p-0.5">
+            <BrandMark className="h-9 w-9" />
+          </span>
+          <span className="text-lg font-semibold tracking-tight">设计资产库</span>
+        </div>
+        <div>
+          <p className="text-sm text-white/55">内部资料</p>
+          <p className="mt-3 max-w-sm text-3xl leading-snug font-semibold tracking-tight">把字体、海报、界面和工具文件放在一处。</p>
+        </div>
+        <p className="text-xs text-white/45">仅团队成员可访问</p>
+      </section>
+      <section className="flex items-center justify-center px-4 py-16">
+        <form onSubmit={onSubmit} className="w-full max-w-sm">
+          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+            <BrandMark />
+            <span className="text-base font-semibold">设计资产库</span>
+          </div>
+          <h1 className="text-[28px] font-semibold tracking-tight">登录</h1>
+          <p className="mt-2 text-sm leading-6 text-muted">使用邮箱和密码登录。账号由管理员在 Supabase 中创建。</p>
+          <label className="mt-8 block text-sm">
+            账号
+            <input name="account" type="email" required autoComplete="username" placeholder="name@example.com" className={fieldClass} />
+          </label>
+          <label className="mt-4 block text-sm">
+            密码
+            <input name="password" type="password" required autoComplete="current-password" className={fieldClass} />
+          </label>
+          {error ? (
+            <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" disabled={pending} className={`${primaryButtonClass} mt-6 w-full`}>
+            {pending ? '正在登录…' : '登录'}
+          </button>
+        </form>
+      </section>
     </main>
   )
 }

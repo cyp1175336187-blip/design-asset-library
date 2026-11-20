@@ -2,8 +2,9 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
+import { fieldClass, primaryButtonClass } from '@/components/styles'
 import type { Asset } from '@/lib/assets'
-import { allCategories } from '@/lib/taxonomy'
+import { allCategories, categoryPathName } from '@/lib/taxonomy'
 
 export function AssetEditor({ asset }: { asset: Asset }) {
   const router = useRouter()
@@ -46,42 +47,60 @@ export function AssetEditor({ asset }: { asset: Asset }) {
   }
 
   return (
-    <form key={asset.updatedAt} onSubmit={onSubmit} className="mt-8 space-y-3 border-t pt-6">
-      <h2 className="text-lg font-medium">编辑</h2>
-      <Field label="标题" name="title" defaultValue={asset.title} />
-      <Field label="介绍" name="intro" defaultValue={asset.intro} multiline />
-      <Field label="描述" name="description" defaultValue={asset.description} multiline />
-      <label className="block text-sm">
-        分类
-        <select name="category" defaultValue={asset.categoryId} className="mt-1 w-full border px-3 py-2">
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Field label="标签" name="tags" defaultValue={asset.tags.join(', ')} />
-      <Field label="备注" name="remark" defaultValue={asset.remark} multiline />
-      <Field label="平台支持" name="platform" defaultValue={asset.platform} />
-      <Field label="版本号" name="version" defaultValue={asset.version} />
-      <Field label="资产说明" name="assetNotes" defaultValue={asset.notes} multiline />
-      <Field label="安装说明" name="installNotes" defaultValue={asset.install} multiline />
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      {saved ? <p className="text-sm text-neutral-600">已保存</p> : null}
-      <button type="submit" disabled={pending} className="border px-3 py-2 text-sm disabled:opacity-60">
+    <form key={asset.updatedAt} onSubmit={onSubmit} className="mt-10 border-t border-line pt-8">
+      <h2 className="text-lg font-semibold">编辑</h2>
+      <p className="mt-1 text-sm text-muted">保存后只更新这条资产的资料，不会重新上传文件。</p>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <Field label="标题" name="title" defaultValue={asset.title} wide />
+        <Field label="介绍" name="intro" defaultValue={asset.intro} multiline wide />
+        <Field label="描述" name="description" defaultValue={asset.description} multiline wide />
+        <label className="block text-sm">
+          分类
+          <select name="category" defaultValue={asset.categoryId} className={fieldClass}>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {categoryPathName(category)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Field label="标签" name="tags" defaultValue={asset.tags.join(', ')} />
+        <Field label="平台支持" name="platform" defaultValue={asset.platform} />
+        <Field label="版本号" name="version" defaultValue={asset.version} />
+        <Field label="备注" name="remark" defaultValue={asset.remark} multiline wide />
+        <Field label="资产说明" name="assetNotes" defaultValue={asset.notes} multiline wide />
+        <Field label="安装说明" name="installNotes" defaultValue={asset.install} multiline wide />
+      </div>
+      {error ? (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+      {saved ? <p className="mt-4 text-sm text-accent">已保存</p> : null}
+      <button type="submit" disabled={pending} className={`${primaryButtonClass} mt-4`}>
         {pending ? '正在保存…' : '保存'}
       </button>
     </form>
   )
 }
 
-function Field({ label, name, defaultValue, multiline = false }: { label: string; name: string; defaultValue: string; multiline?: boolean }) {
-  const className = 'mt-1 w-full border px-3 py-2'
+function Field({
+  label,
+  name,
+  defaultValue,
+  multiline = false,
+  wide = false,
+}: {
+  label: string
+  name: string
+  defaultValue: string
+  multiline?: boolean
+  wide?: boolean
+}) {
   return (
-    <label className="block text-sm">
+    <label className={`block text-sm ${wide ? 'md:col-span-2' : ''}`}>
       {label}
-      {multiline ? <textarea name={name} defaultValue={defaultValue} rows={3} className={className} /> : <input name={name} defaultValue={defaultValue} className={className} />}
+      {multiline ? <textarea name={name} defaultValue={defaultValue} rows={4} className={fieldClass} /> : <input name={name} defaultValue={defaultValue} className={fieldClass} />}
     </label>
   )
 }
