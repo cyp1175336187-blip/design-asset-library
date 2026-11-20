@@ -1,35 +1,81 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { ASSET_BUCKET, storageObjectPath } from '@/lib/storage'
 import { getBrowserClient } from '@/lib/supabase/browser'
 import { allCategories } from '@/lib/taxonomy'
-import { classifyFolder, folderError, normalizeRelativePath } from '@/lib/uploads'
+import {
+  acceptAttribute,
+  classifySelectedFiles,
+  dataTransferHasDirectory,
+  DIRECTORY_UPLOAD_ERROR,
+  normalizeRelativePath,
+  selectionError,
+  selectionSummary,
+  type SelectedFileInput,
+} from '@/lib/uploads'
 
 export function UploadForm() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
+  const [summary, setSummary] = useState<string | null>(null)
   const categories = allCategories()
+
+  function onFilesChanged(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const classified = classifySelectedFiles(selectedFrom(input.files))
+    if (classified.directoryPath) input.value = ''
+    setError(selectionError(classified))
+    setSummary(selectionSummary(classified))
+  }
+
+  function onDragOverCapture(event: DragEvent<HTMLFormElement>) {
+    if (!event.dataTransfer || !dragHasFiles(event.dataTransfer)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  // Capture runs before the file input accepts the drop, so a directory never becomes the selection.
+  function onDropCapture(event: DragEvent<HTMLFormElement>) {
+    const transfer = event.dataTransfer
+    if (!transfer || !dragHasFiles(transfer)) return
+    if (directoryDropped(transfer)) {
+      event.preventDefault()
+      event.stopPropagation()
+      setError(DIRECTORY_UPLOAD_ERROR)
+      return
+    }
+    const files = [...transfer.files]
+    if (files.length === 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const input = event.currentTarget.elements.namedItem('files')
+    if (!(input instanceof HTMLInputElement)) return
+    const next = new DataTransfer()
+    for (const file of files) next.items.add(file)
+    input.files = next.files
+    const classified = classifySelectedFiles(files.map(toSelectedFile))
+    if (classified.directoryPath) input.value = ''
+    setError(selectionError(classified))
+    setSummary(selectionSummary(classified))
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     const form = event.currentTarget
     const category = String(new FormData(form).get('category') ?? '')
-    const input = form.elements.namedItem('folder')
+    const input = form.elements.namedItem('files')
     const fileList = input instanceof HTMLInputElement ? [...(input.files ?? [])] : []
-    const classified = classifyFolder(
-      fileList.map((file) => ({
-        relativePath: file.webkitRelativePath || file.name,
-        mime: file.type,
-      })),
-    )
-    const problem = folderError(classified)
-    if (problem) {
-      setError(problem)
+    const classified = classifySelectedFiles(fileList.map(toSelectedFile))
+    const problem = selectionError(classified)
+    if (problem || !classified.primary) {
+      if (classified.directoryPath && input instanceof HTMLInputElement) input.value = ''
+      setSummary(selectionSummary(classified))
+      setError(problem ?? '请选择一个或多个文件。')
       return
     }
 
@@ -50,15 +96,15 @@ export function UploadForm() {
     const uploaded: string[] = []
     const filesByPath = new Map<string, File>()
     for (const file of fileList) {
-      const relativePath = normalizeRelativePath(file.webkitRelativePath || file.name)
-      if (relativePath) filesByPath.set(relativePath, file)
+      const relativePath = normalizeRelativePath(file.name)
+      if (relativePath && !filesByPath.has(relativePath)) filesByPath.set(relativePath, file)
     }
     try {
       for (const [index, item] of classified.accepted.entries()) {
         const file = filesByPath.get(item.relativePath)
         if (!file) throw new Error(`找不到 ${item.originalName}`)
         const path = storageObjectPath(userData.user.id, assetId, item.relativePath)
-        setProgress(`正在上传 ${index + 1}/${classified.accepted.length}`)
+        setProgress(`正在上传 ${index + 1}/${classified.accepted.length}：${item.originalName}`)
         const { error: uploadError } = await supabase.storage.from(ASSET_BUCKET).upload(path, file, {
           contentType: item.mime,
           upsert: false,
@@ -92,18 +138,20 @@ export function UploadForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 space-y-4">
+    <form onSubmit={onSubmit} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture} className="mt-4 space-y-4">
       <label className="block text-sm">
-        文件夹
+        文件
         <input
-          name="folder"
+          name="files"
           type="file"
           required
           multiple
+          accept={acceptAttribute()}
+          onChange={onFilesChanged}
           className="mt-1 block w-full text-sm"
-          {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
         />
       </label>
+      <p className="text-sm text-neutral-600">可以选一个或多个文件。拖入文件夹会被拒绝，不会上传其中的内容。</p>
       <label className="block text-sm">
         分类
         <select name="category" required className="mt-1 w-full border px-3 py-2" defaultValue={categories[0]?.id ?? ''}>
@@ -114,6 +162,7 @@ export function UploadForm() {
           ))}
         </select>
       </label>
+      {summary ? <p className="text-sm text-neutral-700">{summary}</p> : null}
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
       {progress ? <p className="text-sm text-neutral-600">{progress}</p> : null}
       <button type="submit" disabled={pending} className="border px-3 py-2 text-sm disabled:opacity-60">
@@ -121,4 +170,26 @@ export function UploadForm() {
       </button>
     </form>
   )
+}
+
+function toSelectedFile(file: File): SelectedFileInput {
+  return { name: file.name, webkitRelativePath: file.webkitRelativePath, mime: file.type }
+}
+
+function selectedFrom(files: FileList | null) {
+  return [...(files ?? [])].map(toSelectedFile)
+}
+
+function dragHasFiles(transfer: DataTransfer) {
+  return Array.from(transfer.types).includes('Files')
+}
+
+function directoryDropped(transfer: DataTransfer) {
+  return dataTransferHasDirectory({
+    items: [...transfer.items].map((item) => ({
+      kind: item.kind,
+      webkitGetAsEntry: () => item.webkitGetAsEntry(),
+    })),
+    files: [...transfer.files].map((file) => ({ webkitRelativePath: file.webkitRelativePath })),
+  })
 }

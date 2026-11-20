@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { ASSET_BUCKET, storageObjectPath } from '@/lib/storage'
 import { requireUser } from '@/lib/supabase/server'
 import { findCategory } from '@/lib/taxonomy'
-import { classifyFolder, folderError, isUuid } from '@/lib/uploads'
+import { classifySelection, isUuid, selectionError } from '@/lib/uploads'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
   if (!isUuid(assetId)) return NextResponse.json({ error: '资产编号无效' }, { status: 400 })
   if (!findCategory(category)) return NextResponse.json({ error: '请选择分类' }, { status: 400 })
 
-  const classified = classifyFolder(files)
-  const problem = folderError(classified)
+  const classified = classifySelection(files)
+  const problem = selectionError(classified)
   if (problem || !classified.primary) return NextResponse.json({ error: problem ?? '没有可保存的文件' }, { status: 400 })
 
   const title = (titleInput || classified.title).slice(0, 200)
