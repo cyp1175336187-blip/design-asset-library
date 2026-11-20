@@ -62,15 +62,42 @@ export function allCategories(): Category[] {
 }
 
 export function findCategory(id: string): Category | undefined {
-  let found: Category | undefined
+  return findCategoryContext(id)?.category
+}
+
+export type CategoryLocation = {
+  section: TaxonomySection
+  ancestors: Category[]
+  category: Category
+}
+
+export function findCategoryContext(id: string): CategoryLocation | null {
   for (const section of taxonomy) {
-    walk(section.categories, (category) => {
-      if (category.id === id) {
-        found = category
-      }
-    })
+    const match = findInCategories(section.categories, [], id)
+    if (match) return { section, ancestors: match.ancestors, category: match.category }
   }
-  return found
+  return null
+}
+
+export function categoryPathName(category: Category) {
+  const context = findCategoryContext(category.id)
+  if (!context || context.ancestors.length === 0) return category.name
+  return `${context.ancestors.map((item) => item.name).join(' / ')} / ${category.name}`
+}
+
+function findInCategories(
+  categories: Category[],
+  ancestors: Category[],
+  id: string,
+): { ancestors: Category[]; category: Category } | null {
+  for (const category of categories) {
+    if (category.id === id) return { ancestors, category }
+    if (category.children?.length) {
+      const nested = findInCategories(category.children, ancestors.concat(category), id)
+      if (nested) return nested
+    }
+  }
+  return null
 }
 
 export function categoryMatchIds(id: string): Set<string> | null {

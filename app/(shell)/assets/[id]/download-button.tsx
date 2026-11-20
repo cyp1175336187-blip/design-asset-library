@@ -2,8 +2,9 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { primaryButtonClass } from '@/components/styles'
 
-export function DownloadButton({ assetId, disabled }: { assetId: string; disabled: boolean }) {
+export function DownloadButton({ assetId, disabled, className }: { assetId: string; disabled: boolean; className?: string }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -33,10 +34,14 @@ export function DownloadButton({ assetId, disabled }: { assetId: string; disable
 
   return (
     <div>
-      <button type="button" onClick={onClick} disabled={disabled || pending} className="border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+      <button type="button" onClick={onClick} disabled={disabled || pending} className={className ?? primaryButtonClass}>
         {pending ? '准备下载…' : '下载'}
       </button>
-      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }
