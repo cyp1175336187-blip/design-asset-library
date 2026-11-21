@@ -31,6 +31,7 @@ export function AssetBrowser({ assets }: { assets: Asset[] }) {
         assets={filtered}
         categoryName={category?.name}
         query={trimmedQuery || undefined}
+        categoryId={category?.id}
         unknownCategory={Boolean(categoryId && !category)}
       />
     </section>

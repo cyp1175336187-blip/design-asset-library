@@ -1,11 +1,16 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { fieldClass, primaryButtonClass } from '@/components/styles'
 import { ASSET_BUCKET, storageObjectPath } from '@/lib/storage'
 import { getBrowserClient } from '@/lib/supabase/browser'
-import { allCategories, categoryPathName } from '@/lib/taxonomy'
+import { allCategories, categoryPathName, findCategory } from '@/lib/taxonomy'
+import {
+  effectiveUploadLimit,
+  storageSizeMessage,
+  uploadSizeError,
+} from '@/lib/upload-size'
 import {
   acceptAttribute,
   classifySelectedFiles,
@@ -17,20 +22,60 @@ import {
   type SelectedFileInput,
 } from '@/lib/uploads'
 
-export function UploadForm() {
+export function UploadForm({ configuredMaxBytes = null }: { configuredMaxBytes?: number | null }) {
   const router = useRouter()
+  const params = useSearchParams()
+  const requestedCategory = params.get('category')?.trim() ?? ''
+  const locked = requestedCategory ? findCategory(requestedCategory) : undefined
+  const invalidCategory = Boolean(requestedCategory) && !locked
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
+  const [bucketLimit, setBucketLimit] = useState<unknown>(null)
   const categories = allCategories()
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadBucketLimit() {
+      const supabase = await getBrowserClient()
+      if (!supabase) return
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) return
+      const bucketResult = await supabase.storage.getBucket(ASSET_BUCKET)
+      if (cancelled || bucketResult.error) return
+      setBucketLimit(bucketResult.data?.file_size_limit ?? null)
+    }
+    void loadBucketLimit()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function sizeProblemFor(files: File[], limit: unknown = bucketLimit) {
+    return uploadSizeError(
+      files.map((file) => ({ name: file.name, size: file.size })),
+      effectiveUploadLimit(limit, configuredMaxBytes),
+    )
+  }
+
+  function applySelection(files: File[]) {
+    const classified = classifySelectedFiles(files.map(toSelectedFile))
+    if (classified.directoryPath) {
+      setSummary(null)
+      setError(DIRECTORY_UPLOAD_ERROR)
+      return true
+    }
+    const sizeProblem = sizeProblemFor(files)
+    setError(sizeProblem ?? selectionError(classified))
+    setSummary(sizeProblem ? null : selectionSummary(classified))
+    return false
+  }
 
   function onFilesChanged(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget
-    const classified = classifySelectedFiles(selectedFrom(input.files))
-    if (classified.directoryPath) input.value = ''
-    setError(selectionError(classified))
-    setSummary(selectionSummary(classified))
+    const clear = applySelection([...(input.files ?? [])])
+    if (clear) input.value = ''
   }
 
   function onDragOverCapture(event: DragEvent<HTMLFormElement>) {
@@ -46,6 +91,7 @@ export function UploadForm() {
     if (directoryDropped(transfer)) {
       event.preventDefault()
       event.stopPropagation()
+      setSummary(null)
       setError(DIRECTORY_UPLOAD_ERROR)
       return
     }
@@ -58,25 +104,33 @@ export function UploadForm() {
     const next = new DataTransfer()
     for (const file of files) next.items.add(file)
     input.files = next.files
-    const classified = classifySelectedFiles(files.map(toSelectedFile))
-    if (classified.directoryPath) input.value = ''
-    setError(selectionError(classified))
-    setSummary(selectionSummary(classified))
+    const clear = applySelection(files)
+    if (clear) input.value = ''
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     const form = event.currentTarget
-    const category = String(new FormData(form).get('category') ?? '')
+    const category = locked?.id ?? String(new FormData(form).get('category') ?? '').trim()
     const input = form.elements.namedItem('files')
     const fileList = input instanceof HTMLInputElement ? [...(input.files ?? [])] : []
     const classified = classifySelectedFiles(fileList.map(toSelectedFile))
     const problem = selectionError(classified)
+    if (classified.directoryPath && input instanceof HTMLInputElement) input.value = ''
     if (problem || !classified.primary) {
-      if (classified.directoryPath && input instanceof HTMLInputElement) input.value = ''
-      setSummary(selectionSummary(classified))
+      setSummary(classified.directoryPath ? null : selectionSummary(classified))
       setError(problem ?? '请选择一个或多个文件。')
+      return
+    }
+    if (!findCategory(category)) {
+      setError(invalidCategory || category ? '分类无效。' : '请选择分类。')
+      return
+    }
+    const knownSizeProblem = sizeProblemFor(fileList)
+    if (knownSizeProblem) {
+      setSummary(null)
+      setError(knownSizeProblem)
       return
     }
 
@@ -90,6 +144,20 @@ export function UploadForm() {
     const { data: userData, error: userError } = await supabase.auth.getUser()
     if (userError || !userData.user) {
       window.location.href = '/login'
+      return
+    }
+
+    let remoteLimit = bucketLimit
+    const bucketResult = await supabase.storage.getBucket(ASSET_BUCKET)
+    if (!bucketResult.error) {
+      remoteLimit = bucketResult.data?.file_size_limit ?? null
+      setBucketLimit(remoteLimit)
+    }
+    const remoteSizeProblem = sizeProblemFor(fileList, remoteLimit)
+    if (remoteSizeProblem) {
+      setSummary(null)
+      setError(remoteSizeProblem)
+      setPending(false)
       return
     }
 
@@ -110,7 +178,7 @@ export function UploadForm() {
           contentType: item.mime,
           upsert: false,
         })
-        if (uploadError) throw new Error(uploadError.message)
+        if (uploadError) throw new Error(storageSizeMessage(uploadError.message, { name: file.name, size: file.size }))
         uploaded.push(path)
       }
 
@@ -143,18 +211,29 @@ export function UploadForm() {
       <label className="flex cursor-pointer flex-col items-center rounded-2xl border border-dashed border-neutral-300 bg-mist px-6 py-14 text-center transition-colors hover:border-neutral-500 focus-within:border-ink">
         <input name="files" type="file" required multiple accept={acceptAttribute()} onChange={onFilesChanged} className="sr-only" />
         <span className="text-sm font-medium text-ink">选择文件</span>
-        <span className="mt-2 max-w-md text-sm leading-6 text-muted">可以选一个或多个文件。拖入文件夹会被拒绝，不会上传其中的内容。</span>
       </label>
-      <label className="block text-sm">
-        分类
-        <select name="category" required className={fieldClass} defaultValue={categories[0]?.id ?? ''}>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {categoryPathName(category)}
-            </option>
-          ))}
-        </select>
-      </label>
+      {locked ? (
+        <>
+          <input type="hidden" name="category" value={locked.id} />
+          <p className="text-sm text-muted">保存到 {categoryPathName(locked)}</p>
+        </>
+      ) : (
+        <label className="block text-sm">
+          分类
+          <select name="category" required className={fieldClass} defaultValue={categories[0]?.id ?? ''}>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {categoryPathName(category)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {invalidCategory ? (
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-danger">
+          没有这个分类。请重新选择。
+        </p>
+      ) : null}
       {summary ? <p className="rounded-xl bg-mist px-4 py-3 text-sm leading-6 text-neutral-700">{summary}</p> : null}
       {error ? (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm leading-6 text-danger">
@@ -171,10 +250,6 @@ export function UploadForm() {
 
 function toSelectedFile(file: File): SelectedFileInput {
   return { name: file.name, webkitRelativePath: file.webkitRelativePath, mime: file.type }
-}
-
-function selectedFrom(files: FileList | null) {
-  return [...(files ?? [])].map(toSelectedFile)
 }
 
 function dragHasFiles(transfer: DataTransfer) {
