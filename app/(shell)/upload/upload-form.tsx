@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { fieldClass, primaryButtonClass } from '@/components/styles'
+import { browseHref } from '@/lib/browse'
 import { ASSET_BUCKET, storageObjectPath } from '@/lib/storage'
 import { getBrowserClient } from '@/lib/supabase/browser'
 import { allCategories, categoryPathName, findCategory } from '@/lib/taxonomy'
@@ -16,7 +17,10 @@ import {
   classifySelectedFiles,
   dataTransferHasDirectory,
   DIRECTORY_UPLOAD_ERROR,
+  filesToRetry,
   normalizeRelativePath,
+  partialUploadMessage,
+  planAssets,
   selectionError,
   selectionSummary,
   type SelectedFileInput,
@@ -161,49 +165,89 @@ export function UploadForm({ configuredMaxBytes = null }: { configuredMaxBytes?:
       return
     }
 
-    const assetId = crypto.randomUUID()
-    const uploaded: string[] = []
+    const plans = planAssets(classified)
+    if (plans.length === 0) {
+      setError('没有可保存的文件。')
+      setPending(false)
+      return
+    }
     const filesByPath = new Map<string, File>()
     for (const file of fileList) {
       const relativePath = normalizeRelativePath(file.name)
       if (relativePath && !filesByPath.has(relativePath)) filesByPath.set(relativePath, file)
     }
-    try {
-      for (const [index, item] of classified.accepted.entries()) {
-        const file = filesByPath.get(item.relativePath)
-        if (!file) throw new Error(`找不到 ${item.originalName}`)
-        const path = storageObjectPath(userData.user.id, assetId, item.relativePath)
-        setProgress(`正在上传 ${index + 1}/${classified.accepted.length}：${item.originalName}`)
-        const { error: uploadError } = await supabase.storage.from(ASSET_BUCKET).upload(path, file, {
-          contentType: item.mime,
-          upsert: false,
+    const createdIds: string[] = []
+    const failures: { name: string; message: string }[] = []
+    for (const [index, plan] of plans.entries()) {
+      const assetId = crypto.randomUUID()
+      const uploaded: string[] = []
+      setProgress(`正在创建 ${index + 1}/${plans.length}：${plan.primary.originalName}`)
+      try {
+        for (const item of plan.accepted) {
+          const file = filesByPath.get(item.relativePath)
+          if (!file) throw new Error(`找不到 ${item.originalName}`)
+          const path = storageObjectPath(userData.user.id, assetId, item.relativePath)
+          const { error: uploadError } = await supabase.storage.from(ASSET_BUCKET).upload(path, file, {
+            contentType: item.mime,
+            upsert: false,
+          })
+          if (uploadError) throw new Error(storageSizeMessage(uploadError.message, { name: file.name, size: file.size }))
+          uploaded.push(path)
+        }
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assetId,
+            category,
+            title: plan.title,
+            files: plan.accepted.map((file) => ({ relativePath: file.relativePath, mime: file.mime })),
+          }),
         })
-        if (uploadError) throw new Error(storageSizeMessage(uploadError.message, { name: file.name, size: file.size }))
-        uploaded.push(path)
+        const body = (await response.json()) as { id?: string; error?: string }
+        if (!response.ok || !body.id) throw new Error(body.error ?? '保存资产信息失败')
+        createdIds.push(body.id)
+      } catch (uploadError) {
+        if (uploaded.length > 0) await supabase.storage.from(ASSET_BUCKET).remove(uploaded)
+        failures.push({
+          name: plan.primary.originalName,
+          message: uploadError instanceof Error ? uploadError.message : '上传失败',
+        })
       }
+    }
 
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assetId,
-          category,
-          title: classified.title,
-          files: classified.accepted.map((file) => ({ relativePath: file.relativePath, mime: file.mime })),
-        }),
-      })
-      const body = (await response.json()) as { id?: string; error?: string }
-      if (!response.ok || !body.id) throw new Error(body.error ?? '保存资产信息失败')
-      router.push(`/assets/${body.id}`)
-      router.refresh()
-    } catch (uploadError) {
-      if (uploaded.length > 0) {
-        await supabase.storage.from(ASSET_BUCKET).remove(uploaded)
+    const failureMessage = partialUploadMessage(createdIds.length, failures)
+    if (failureMessage) {
+      const failedPlans = plans.filter((plan) => failures.some((failure) => failure.name === plan.primary.originalName))
+      const retryNames = new Set(
+        filesToRetry(
+          plans.flatMap((plan) => plan.accepted.map((file) => file.relativePath)),
+          failedPlans.flatMap((plan) => plan.accepted.map((file) => file.relativePath)),
+        ),
+      )
+      if (input instanceof HTMLInputElement) {
+        const next = new DataTransfer()
+        for (const file of fileList) {
+          const relativePath = normalizeRelativePath(file.name)
+          if (relativePath && retryNames.has(relativePath)) next.items.add(file)
+        }
+        input.files = next.files
+        applySelection([...(input.files ?? [])])
       }
-      setError(uploadError instanceof Error ? uploadError.message : '上传失败')
+      setError(failureMessage)
       setPending(false)
       setProgress(null)
+      return
     }
+
+    setPending(false)
+    setProgress(null)
+    if (createdIds.length === 1) {
+      router.push(`/assets/${createdIds[0]}`)
+    } else {
+      router.push(browseHref({ categoryId: category }))
+    }
+    router.refresh()
   }
 
   return (

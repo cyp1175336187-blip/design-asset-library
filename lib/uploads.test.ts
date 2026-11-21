@@ -9,6 +9,9 @@ import {
   dataTransferHasDirectory,
   DIRECTORY_UPLOAD_ERROR,
   MAX_UPLOAD_FILES,
+  filesToRetry,
+  partialUploadMessage,
+  planAssets,
   selectionError,
   selectionSummary,
 } from './uploads.ts'
@@ -84,6 +87,61 @@ describe('single and multiple files', () => {
     assert.equal(result.primary?.role, 'preview')
     assert.equal(result.preview?.relativePath, 'mark.svg')
     assert.equal(result.primary?.mime, 'image/svg+xml')
+  })
+})
+
+describe('poster assets', () => {
+  it('creates one asset and cover for each of three images', () => {
+    const result = classifySelection([
+      { relativePath: '海报一.jpg', mime: 'image/jpeg' },
+      { relativePath: '海报二.jpeg' },
+      { relativePath: '海报三.png', mime: 'image/png' },
+    ])
+    assert.equal(selectionError(result), null)
+    const plans = planAssets(result)
+    assert.equal(plans.length, 3)
+    assert.deepEqual(
+      plans.map((plan) => plan.primary.originalName),
+      ['海报一.jpg', '海报二.jpeg', '海报三.png'],
+    )
+    for (const plan of plans) {
+      assert.equal(plan.accepted.length, 1)
+      assert.equal(plan.preview?.relativePath, plan.primary.relativePath)
+      assert.equal(plan.primary.role, 'preview')
+    }
+    assert.match(selectionSummary(result) ?? '', /将创建 3 条资产/)
+    assert.equal(planAssets(classifySelection([{ relativePath: 'a.webp' }, { relativePath: 'b.webp' }])).length, 2)
+    assert.deepEqual(
+      plans.map((plan) => plan.accepted.map((file) => file.relativePath)),
+      [['海报一.jpg'], ['海报二.jpeg'], ['海报三.png']],
+    )
+    const requests = plans.map((plan) => ({
+      category: 'poster-design',
+      title: plan.title,
+      files: plan.accepted.map((file) => file.relativePath),
+    }))
+    assert.deepEqual(
+      requests.map((request) => request.category),
+      ['poster-design', 'poster-design', 'poster-design'],
+    )
+  })
+
+  it('keeps a design source and its preview on one asset', () => {
+    const result = classifySelection([{ relativePath: '海报.psd' }, { relativePath: '海报.jpg' }])
+    const plans = planAssets(result)
+    assert.equal(plans.length, 1)
+    assert.equal(plans[0]?.primary.originalName, '海报.psd')
+    assert.equal(plans[0]?.preview?.originalName, '海报.jpg')
+    assert.match(selectionSummary(result) ?? '', /同一条资产/)
+  })
+
+  it('reports created assets and keeps only failed files for retry', () => {
+    assert.deepEqual(filesToRetry(['海报一.jpg', '海报二.jpg', '海报三.jpg'], ['海报二.jpg']), ['海报二.jpg'])
+    const message = partialUploadMessage(2, [{ name: '海报二.jpg', message: '超过了允许的大小。' }])
+    assert.match(message ?? '', /已创建 2 条资产/)
+    assert.match(message ?? '', /海报二\.jpg/)
+    assert.match(message ?? '', /重新上传/)
+    assert.match(partialUploadMessage(0, [{ name: '海报一.jpg', message: '上传失败' }]) ?? '', /没有创建资产/)
   })
 })
 
@@ -194,6 +252,8 @@ describe('upload surfaces', () => {
     const readme = source('../README.md')
     const library = source('./uploads.ts')
 
+    assert.match(form, /planAssets/)
+    assert.match(form, /filesToRetry/)
     assert.match(form, /multiple/)
     assert.match(form, /onDragOverCapture/)
     assert.match(form, /onDropCapture/)
@@ -212,7 +272,8 @@ describe('upload surfaces', () => {
     assert.match(route, /selectionError/)
     assert.doesNotMatch(route, /classifyFolder|folderError/)
 
-    assert.match(readme, /一次提交只创建\*\*一条\*\*资产/)
+    assert.match(readme, /每张图片各自成为一条资产/)
+    assert.match(readme, /仍保存为\*\*一条\*\*资产/)
     assert.match(readme, /不会递归上传/)
     assert.doesNotMatch(readme, /选择\*\*一个\*\*文件夹/)
 
