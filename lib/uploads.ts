@@ -210,8 +210,66 @@ export function selectionError(result: ClassifiedSelection) {
   return null
 }
 
+export type AssetPlan = {
+  accepted: ClassifiedFile[]
+  title: string
+  primary: ClassifiedFile
+  preview: ClassifiedFile | null
+  tags: string[]
+}
+
+export function planAssets(selection: ClassifiedSelection): AssetPlan[] {
+  if (selectionError(selection) || !selection.primary) return []
+  const separatePosters =
+    selection.accepted.length > 1 &&
+    selection.accepted.every((file) => (PREVIEW_EXTENSIONS as readonly string[]).includes(file.extension))
+  if (!separatePosters) {
+    return [
+      {
+        accepted: selection.accepted,
+        title: selection.title,
+        primary: selection.primary,
+        preview: selection.preview,
+        tags: selection.tags,
+      },
+    ]
+  }
+  return selection.accepted.flatMap((file) => {
+    const single = classifySelection([{ relativePath: file.relativePath, mime: file.mime }])
+    if (!single.primary) return []
+    return [
+      {
+        accepted: single.accepted,
+        title: single.title,
+        primary: single.primary,
+        preview: single.preview,
+        tags: single.tags,
+      },
+    ]
+  })
+}
+
+export function partialUploadMessage(created: number, failures: { name: string; message: string }[]) {
+  if (failures.length === 0) return null
+  const details = failures.map((failure) => `「${failure.name}」${failure.message}`).join('；')
+  if (created === 0) return `没有创建资产。${details}`
+  return `已创建 ${created} 条资产。未能创建：${details}。请只重新上传失败的文件，避免重复。`
+}
+
+export function filesToRetry(allNames: string[], failedNames: string[]) {
+  const failed = new Set(failedNames)
+  return allNames.filter((name) => failed.has(name))
+}
+
 export function selectionSummary(result: ClassifiedSelection) {
   if (!result.primary) return null
+  const plans = planAssets(result)
+  if (plans.length > 1) {
+    const names = plans.map((plan) => plan.primary.originalName)
+    const shown = names.slice(0, 4).join('、')
+    const suffix = names.length > 4 ? ` 等 ${names.length} 张` : ''
+    return `将创建 ${plans.length} 条资产，每张图片单独有封面：${shown}${suffix}。`
+  }
   const count = result.accepted.length
   const lead = count === 1 ? '这个文件会保存为同一条资产' : `这 ${count} 个文件会保存为同一条资产`
   const titled = `${lead}「${result.title}」`
