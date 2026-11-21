@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test lib/uploads.test.ts lib/taxonomy.test.ts"
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test lib/uploads.test.ts lib/taxonomy.test.ts lib/upload-size.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

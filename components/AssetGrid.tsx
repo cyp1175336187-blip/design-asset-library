@@ -6,6 +6,7 @@ import type { Asset } from '@/lib/assets'
 import { findCategory } from '@/lib/taxonomy'
 import { fileExtension } from '@/lib/uploads'
 import { primaryButtonClass } from '@/components/styles'
+import { uploadHref } from '@/lib/browse'
 
 const PLATES = [
   { bg: '#e7f0ec', ink: '#1f4d40' },
@@ -19,16 +20,18 @@ const PLATES = [
 export function AssetGrid({
   assets,
   categoryName,
+  categoryId,
   query,
   unknownCategory = false,
 }: {
   assets: Asset[]
   categoryName?: string
+  categoryId?: string
   query?: string
   unknownCategory?: boolean
 }) {
   if (assets.length === 0) {
-    return <EmptyAssets message={emptyMessage(categoryName, query, unknownCategory)} />
+    return <EmptyAssets message={emptyMessage(categoryName, query, unknownCategory)} categoryId={categoryId} />
   }
 
   return (
@@ -82,7 +85,7 @@ function cardMeta(asset: Asset) {
   return parts.join(' · ')
 }
 
-function EmptyAssets({ message }: { message: string }) {
+function EmptyAssets({ message, categoryId }: { message: string; categoryId?: string }) {
   return (
     <div className="flex flex-col items-center rounded-3xl border border-dashed border-line bg-mist/80 px-6 py-16 text-center">
       <EmptyMark />
@@ -90,7 +93,7 @@ function EmptyAssets({ message }: { message: string }) {
       <p className="mt-2 max-w-md text-sm leading-6 text-muted">
         上传后会显示在这里。一次可以选择一个或多个文件，并保存为同一条资产；不能上传文件夹。
       </p>
-      <Link href="/upload" className={`${primaryButtonClass} mt-6`}>
+      <Link href={uploadHref(categoryId)} className={`${primaryButtonClass} mt-6`}>
         上传资产
       </Link>
     </div>

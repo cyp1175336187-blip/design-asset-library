@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { Suspense, useEffect, useState, type ReactNode } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { uploadHref } from '@/lib/browse'
 import { signOut } from '@/app/(shell)/actions'
 import { BrandMark } from '@/components/BrandMark'
 import { SearchBar } from '@/components/SearchBar'
@@ -13,7 +14,9 @@ export function ShellFrame({ email, children }: { email: string | null; children
   const [open, setOpen] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const pathname = usePathname()
+  const params = useSearchParams()
   const onUpload = pathname === '/upload'
+  const uploadTo = uploadHref(params.get('category'))
 
   useEffect(() => {
     setOpen(false)
@@ -76,7 +79,7 @@ export function ShellFrame({ email, children }: { email: string | null; children
               <SearchBar />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-              <Link href="/upload" aria-current={onUpload ? 'page' : undefined} className={`${primaryButtonClass} whitespace-nowrap`}>
+              <Link href={uploadTo} aria-current={onUpload ? 'page' : undefined} className={`${primaryButtonClass} whitespace-nowrap`}>
                 上传
               </Link>
               {email ? (

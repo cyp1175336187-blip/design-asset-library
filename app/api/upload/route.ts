@@ -29,7 +29,9 @@ export async function POST(request: Request) {
   const files = Array.isArray(record.files) ? record.files.flatMap(readFile) : []
 
   if (!isUuid(assetId)) return NextResponse.json({ error: '资产编号无效' }, { status: 400 })
-  if (!findCategory(category)) return NextResponse.json({ error: '请选择分类' }, { status: 400 })
+  if (!findCategory(category)) {
+    return NextResponse.json({ error: category ? '分类无效' : '请选择分类' }, { status: 400 })
+  }
 
   const classified = classifySelection(files)
   const problem = selectionError(classified)

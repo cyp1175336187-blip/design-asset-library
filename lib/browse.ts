@@ -1,3 +1,11 @@
+import { findCategory } from './taxonomy.ts'
+
+export function uploadHref(categoryId?: string | null) {
+  const id = categoryId?.trim()
+  if (!id || !findCategory(id)) return '/upload'
+  return `/upload?${new URLSearchParams({ category: id }).toString()}`
+}
+
 export function browseHref(options: { categoryId?: string | null; query?: string | null }) {
   const params = new URLSearchParams()
   const categoryId = options.categoryId?.trim()

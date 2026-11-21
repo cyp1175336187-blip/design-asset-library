@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { BrandMark } from '@/components/BrandMark'
-import { browseHref } from '@/lib/browse'
+import { browseHref, uploadHref } from '@/lib/browse'
 import { taxonomy, type Category } from '@/lib/taxonomy'
 
 function initialOpenNodes() {
@@ -52,7 +52,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           全部
         </Link>
         <Link
-          href="/upload"
+          href={uploadHref(current)}
           onClick={onNavigate}
           className={`${rowClass(pathname === '/upload')} mt-1`}
           aria-current={pathname === '/upload' ? 'page' : undefined}
